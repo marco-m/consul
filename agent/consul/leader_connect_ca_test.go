@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net/rpc"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,11 +36,12 @@ import (
 const CATestTimeout = 7 * time.Second
 
 type mockCAServerDelegate struct {
-	t           *testing.T
-	config      *Config
-	store       *state.Store
-	primaryRoot *structs.CARoot
-	callbackCh  chan string
+	t                     *testing.T
+	config                *Config
+	store                 *state.Store
+	primaryRoot           *structs.CARoot
+	secondaryIntermediate string
+	callbackCh            chan string
 }
 
 func NewMockCAServerDelegate(t *testing.T, config *Config) *mockCAServerDelegate {
@@ -138,7 +140,7 @@ func (m *mockCAServerDelegate) forwardDC(method, dc string, args interface{}, re
 		roots.ActiveRootID = m.primaryRoot.ID
 	case "ConnectCA.SignIntermediate":
 		r := reply.(*string)
-		*r = m.primaryRoot.RootCert
+		*r = m.secondaryIntermediate
 	default:
 		return fmt.Errorf("received call to unsupported method %q", method)
 	}
@@ -245,13 +247,14 @@ func initTestManager(t *testing.T, manager *CAManager, delegate *mockCAServerDel
 }
 
 func TestCAManager_Initialize(t *testing.T) {
-
 	conf := DefaultConfig()
 	conf.ConnectEnabled = true
 	conf.PrimaryDatacenter = "dc1"
 	conf.Datacenter = "dc2"
 	delegate := NewMockCAServerDelegate(t, conf)
+	delegate.secondaryIntermediate = delegate.primaryRoot.RootCert
 	manager := NewCAManager(delegate, nil, testutil.Logger(t), conf)
+
 	manager.providerShim = &mockCAProvider{
 		callbackCh: delegate.callbackCh,
 		rootPEM:    delegate.primaryRoot.RootCert,
@@ -396,6 +399,7 @@ func TestCAManager_SignCertificate_WithExpiredCert(t *testing.T) {
 
 			delegate := NewMockCAServerDelegate(t, conf)
 			delegate.primaryRoot.RootCert = rootPEM
+			delegate.secondaryIntermediate = intermediatePEM
 			manager := NewCAManager(delegate, nil, testutil.Logger(t), conf)
 
 			manager.providerShim = &mockCAProvider{
@@ -413,9 +417,7 @@ func TestCAManager_SignCertificate_WithExpiredCert(t *testing.T) {
 			// Call RenewIntermediate and then confirm the RPCs and provider calls
 			// happen in the expected order.
 
-			_, err := manager.SignCertificate(&x509.CertificateRequest{
-				URIs: []*url.URL{connect.SpiffeIDAgent{Host: "foo"}.URI()},
-			}, &connect.SpiffeIDAgent{})
+			_, err := manager.SignCertificate(&x509.CertificateRequest{}, &connect.SpiffeIDAgent{})
 			if arg.isError {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), arg.errorMsg)
@@ -444,6 +446,7 @@ func generateCertPEM(t *testing.T, caPrivKey *rsa.PrivateKey, notBefore time.Tim
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
+		URIs:                  []*url.URL{connect.SpiffeIDAgent{Host: "foo"}.URI()},
 	}
 
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
@@ -551,7 +554,7 @@ func TestCAManager_UpdateConfiguration_Vault_Primary(t *testing.T) {
 	require.Equal(t, connect.HexString(cert.SubjectKeyId), newRoot.SigningKeyID)
 }
 
-func TestCAManager_VaultProvider_WithIntermediateAsPrimaryCA(t *testing.T) {
+func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	if testing.Short() {
 		t.Skip("too slow for testing.Short")
 	}
@@ -559,10 +562,10 @@ func TestCAManager_VaultProvider_WithIntermediateAsPrimaryCA(t *testing.T) {
 
 	vault := ca.NewTestVaultServer(t)
 	vclient := vault.Client()
-	generateExternalRootCA(t, vclient)
+	rootPEM := generateExternalRootCA(t, vclient)
 
 	meshRootPath := "pki-root"
-	setupMeshRootCA(t, vclient, meshRootPath)
+	setupMeshRootCA(t, vclient, meshRootPath, rootPEM)
 
 	_, s1 := testServerWithConfig(t, func(c *Config) {
 		c.CAConfig = &structs.CAConfiguration{
@@ -629,7 +632,7 @@ func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string) *x509.
 	return c
 }
 
-func generateExternalRootCA(t *testing.T, client *vaultapi.Client) {
+func generateExternalRootCA(t *testing.T, client *vaultapi.Client) string {
 	t.Helper()
 	err := client.Sys().Mount("corp", &vaultapi.MountInput{
 		Type:        "pki",
@@ -641,14 +644,15 @@ func generateExternalRootCA(t *testing.T, client *vaultapi.Client) {
 	})
 	require.NoError(t, err, "failed to mount")
 
-	_, err = client.Logical().Write("corp/root/generate/internal", map[string]interface{}{
+	resp, err := client.Logical().Write("corp/root/generate/internal", map[string]interface{}{
 		"common_name": "corporate CA",
 		"ttl":         "2400h",
 	})
 	require.NoError(t, err, "failed to generate root")
+	return resp.Data["certificate"].(string)
 }
 
-func setupMeshRootCA(t *testing.T, client *vaultapi.Client, path string) {
+func setupMeshRootCA(t *testing.T, client *vaultapi.Client, path string, rootPEM string) {
 	t.Helper()
 	err := client.Sys().Mount(path, &vaultapi.MountInput{
 		Type:        "pki",
@@ -661,7 +665,7 @@ func setupMeshRootCA(t *testing.T, client *vaultapi.Client, path string) {
 	require.NoError(t, err, "failed to mount")
 
 	out, err := client.Logical().Write(path+"/intermediate/generate/internal", map[string]interface{}{
-		"common_name": "mesh root CA",
+		"common_name": "primary CA",
 		"ttl":         "2200h",
 		"key_type":    "ec",
 		"key_bits":    256,
@@ -676,8 +680,12 @@ func setupMeshRootCA(t *testing.T, client *vaultapi.Client, path string) {
 	})
 	require.NoError(t, err, "failed to sign intermediate")
 
+	var buf strings.Builder
+	buf.WriteString(ca.EnsureTrailingNewline(intermediate.Data["certificate"].(string)))
+	buf.WriteString(ca.EnsureTrailingNewline(rootPEM))
+
 	_, err = client.Logical().Write(path+"/intermediate/set-signed", map[string]interface{}{
-		"certificate": intermediate.Data["certificate"],
+		"certificate": buf.String(),
 	})
 	require.NoError(t, err, "failed to set signed intermediate")
 }

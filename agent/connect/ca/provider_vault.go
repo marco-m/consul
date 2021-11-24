@@ -12,10 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/consul/lib/decode"
 	"github.com/hashicorp/go-hclog"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
+
+	"github.com/hashicorp/consul/lib/decode"
 
 	"github.com/hashicorp/consul/agent/connect"
 	"github.com/hashicorp/consul/agent/structs"
@@ -440,7 +441,7 @@ func (v *VaultProvider) ActiveIntermediate() (string, error) {
 // because the endpoint only returns the raw PEM contents of the CA cert
 // and not the typical format of the secrets endpoints.
 func (v *VaultProvider) getCA(path string) (string, error) {
-	req := v.client.NewRequest("GET", "/v1/"+path+"/ca/pem")
+	req := v.client.NewRequest("GET", "/v1/"+path+"/ca_chain")
 	resp, err := v.client.RawRequest(req)
 	if resp != nil {
 		defer resp.Body.Close()

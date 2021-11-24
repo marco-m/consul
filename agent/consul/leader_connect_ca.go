@@ -2,7 +2,9 @@ package consul
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -484,6 +486,7 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 	if err != nil {
 		return fmt.Errorf("error getting root cert: %v", err)
 	}
+	fmt.Println("ERROR", logCertChain(rootPEM))
 	rootCA, err := parseCARoot(rootPEM, conf.Provider, conf.ClusterID)
 	if err != nil {
 		return err
@@ -600,6 +603,34 @@ func (c *CAManager) getLeafSigningCertFromRoot(root *structs.CARoot) string {
 		return ""
 	}
 	return root.IntermediateCerts[len(root.IntermediateCerts)-1]
+}
+
+func logCertChain(pemValue string) error {
+	fmt.Println(pemValue)
+	rest := []byte(pemValue)
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return nil
+		}
+		rest = remaining
+
+		if block.Type != "CERTIFICATE" {
+			return fmt.Errorf("PEM-block should be CERTIFICATE type")
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return err
+		}
+
+		raw := sha1.Sum(block.Bytes)
+		hash := connect.HexString(raw[:])
+
+		sid := connect.EncodeSigningKeyID(cert.SubjectKeyId)
+
+		fmt.Println("cert", cert.IsCA, hash, sid, cert.Subject, cert.MaxPathLen, cert.MaxPathLenZero)
+	}
 }
 
 // secondaryInitializeIntermediateCA runs the routine for generating an intermediate CA CSR and getting
