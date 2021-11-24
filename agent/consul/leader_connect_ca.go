@@ -2,7 +2,9 @@ package consul
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -487,6 +489,8 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 		return fmt.Errorf("error generating CA root certificate: %v", err)
 	}
 
+	fmt.Println("ERROR", logCertChain(root.PEM))
+
 	rootCA, err := newCARoot(root.PEM, conf.Provider, conf.ClusterID)
 	if err != nil {
 		return err
@@ -577,6 +581,34 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 	c.logger.Info("initialized primary datacenter CA with provider", "provider", conf.Provider)
 
 	return nil
+}
+
+func logCertChain(pemValue string) error {
+	fmt.Println(pemValue)
+	rest := []byte(pemValue)
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return nil
+		}
+		rest = remaining
+
+		if block.Type != "CERTIFICATE" {
+			return fmt.Errorf("PEM-block should be CERTIFICATE type")
+		}
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return err
+		}
+
+		raw := sha1.Sum(block.Bytes)
+		hash := connect.HexString(raw[:])
+
+		sid := connect.EncodeSigningKeyID(cert.SubjectKeyId)
+
+		fmt.Println("cert", cert.IsCA, hash, sid, cert.Subject, cert.MaxPathLen, cert.MaxPathLenZero)
+	}
 }
 
 // getLeafSigningCertFromRoot returns the PEM encoded certificate that should be used to
