@@ -496,6 +496,15 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 		return err
 	}
 
+	interPEM, err := provider.GenerateIntermediate()
+	if err != nil {
+		return fmt.Errorf("error generating intermediate cert: %v", err)
+	}
+	intermediateCert, err := connect.ParseCert(interPEM)
+	if err != nil {
+		return fmt.Errorf("error getting intermediate cert: %v", err)
+	}
+
 	// If the provider has state to persist and it's changed or new then update
 	// CAConfig.
 	pState, err := provider.State()
