@@ -176,7 +176,7 @@ func makeCommonTLSContextFromSnapshotListenerConfig(cfgSnap *proxycfg.ConfigSnap
 		tlsContext = makeCommonTLSContextFromLeaf(cfgSnap, cfgSnap.Leaf(), makeTLSParametersFromGatewayTLSConfig(*tlsCfg))
 	}
 
-	return tlsContext, err
+	return tlsContext, nil
 }
 
 func resolveListenerTLSConfig(gatewayTLSCfg *structs.GatewayTLSConfig, listenerCfg structs.IngressListener) (*structs.GatewayTLSConfig, error) {
