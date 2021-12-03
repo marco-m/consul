@@ -161,6 +161,9 @@ func makeCommonTLSContextFromSnapshotListenerConfig(cfgSnap *proxycfg.ConfigSnap
 	// Enable connect TLS if it is enabled at the Gateway or specific listener
 	// level.
 	gatewayTLSCfg := cfgSnap.IngressGateway.TLSConfig
+
+	// TODO: should it be possible to explicitly _disable_ TLS on a listener if it's
+	// enabled on the gateway?
 	connectTLSEnabled := gatewayTLSCfg.Enabled ||
 		(listenerCfg.TLS != nil && listenerCfg.TLS.Enabled)
 
