@@ -593,7 +593,13 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, roots.Roots, 1)
 
-	cert1 := getLeafCert(t, codec, roots.TrustDomain)
+	pem := getLeafCert(t, codec, roots.TrustDomain)
+	cert1, intermediates, err := connect.ParseLeafCerts(pem)
+	require.NoError(t, err)
+
+	r, err := connect.ParseCert(roots.Roots[0].RootCert)
+	require.NoError(t, err)
+	fmt.Println("root cert", connect.HexString(r.SubjectKeyId), r.Subject)
 
 	pool := x509.NewCertPool()
 	ok := pool.AppendCertsFromPEM([]byte(roots.Roots[0].RootCert))
@@ -602,15 +608,16 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	}
 
 	_, err = cert1.Verify(x509.VerifyOptions{
-		Roots: pool,
-		//Intermediates: intermediates,
+		Roots:         pool,
+		Intermediates: intermediates,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	})
 	require.NoError(t, err)
 
 	t.Fatalf("not done yet")
 }
 
-func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string) *x509.Certificate {
+func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string) string {
 	pk, pkPEM, err := connect.GeneratePrivateKey()
 	_ = pkPEM // TODO:
 	require.NoError(t, err)
@@ -627,9 +634,7 @@ func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string) *x509.
 	err = msgpackrpc.CallWithCodec(codec, "ConnectCA.Sign", &req, &cert)
 	require.NoError(t, err)
 
-	c, err := connect.ParseCert(cert.CertPEM)
-	require.NoError(t, err)
-	return c
+	return cert.CertPEM
 }
 
 func generateExternalRootCA(t *testing.T, client *vaultapi.Client) string {
