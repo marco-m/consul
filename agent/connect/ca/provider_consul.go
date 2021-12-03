@@ -160,7 +160,7 @@ func (c *ConsulProvider) GenerateRoot() (RootResult, error) {
 		return RootResult{}, fmt.Errorf("provider is not the root certificate authority")
 	}
 	if providerState.RootCert != "" {
-		return RootResult{RootCert: providerState.RootCert}, nil
+		return RootResult{PEM: providerState.RootCert}, nil
 	}
 
 	// Generate a private key if needed
@@ -200,7 +200,7 @@ func (c *ConsulProvider) GenerateRoot() (RootResult, error) {
 		return RootResult{}, err
 	}
 
-	return RootResult{RootCert: newState.RootCert}, nil
+	return RootResult{PEM: newState.RootCert}, nil
 }
 
 // GenerateIntermediateCSR creates a private key and generates a CSR

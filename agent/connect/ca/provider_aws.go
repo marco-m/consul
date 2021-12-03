@@ -146,7 +146,7 @@ func (a *AWSProvider) GenerateRoot() (RootResult, error) {
 	if a.rootPEM == "" {
 		return RootResult{}, fmt.Errorf("AWS CA provider not fully Initialized")
 	}
-	return RootResult{RootCert: a.rootPEM}, nil
+	return RootResult{PEM: a.rootPEM}, nil
 }
 
 // ensureCA loads the CA resource to check it exists if configured by User or in

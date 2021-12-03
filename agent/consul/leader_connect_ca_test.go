@@ -168,7 +168,7 @@ type mockCAProvider struct {
 func (m *mockCAProvider) Configure(cfg ca.ProviderConfig) error { return nil }
 func (m *mockCAProvider) State() (map[string]string, error)     { return nil, nil }
 func (m *mockCAProvider) GenerateRoot() (ca.RootResult, error) {
-	return ca.RootResult{RootCert: m.rootPEM}, nil
+	return ca.RootResult{PEM: m.rootPEM}, nil
 }
 func (m *mockCAProvider) GenerateIntermediateCSR() (string, error) {
 	m.callbackCh <- "provider/GenerateIntermediateCSR"

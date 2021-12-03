@@ -49,7 +49,7 @@ func TestAWSBootstrapAndSignPrimary(t *testing.T) {
 
 			root, err := provider.GenerateRoot()
 			require.NoError(err)
-			rootPEM := root.RootCert
+			rootPEM := root.PEM
 
 			// Generate Intermediate (not actually needed for this provider for now
 			// but this simulates the calls in Server.initializeRoot).
@@ -84,7 +84,7 @@ func TestAWSBootstrapAndSignPrimary(t *testing.T) {
 
 		root, err := provider.GenerateRoot()
 		require.NoError(t, err)
-		rootPEM := root.RootCert
+		rootPEM := root.PEM
 
 		// Ensure they use the right key type
 		rootCert, err := connect.ParseCert(rootPEM)
@@ -119,7 +119,7 @@ func TestAWSBootstrapAndSignSecondary(t *testing.T) {
 	defer p1.Cleanup(true, nil)
 	root, err := p1.GenerateRoot()
 	require.NoError(t, err)
-	rootPEM := root.RootCert
+	rootPEM := root.PEM
 
 	p2 := testAWSProvider(t, testProviderConfigSecondary(t, nil))
 	defer p2.Cleanup(true, nil)
@@ -148,7 +148,7 @@ func TestAWSBootstrapAndSignSecondary(t *testing.T) {
 		p1 = testAWSProvider(t, cfg1)
 		root, err := p1.GenerateRoot()
 		require.NoError(t, err)
-		newRootPEM := root.RootCert
+		newRootPEM := root.PEM
 
 		cfg2 := testProviderConfigPrimary(t, nil)
 		cfg2.State = p2State
@@ -182,7 +182,7 @@ func TestAWSBootstrapAndSignSecondary(t *testing.T) {
 		p1 = testAWSProvider(t, cfg1)
 		root, err := p1.GenerateRoot()
 		require.NoError(t, err)
-		newRootPEM := root.RootCert
+		newRootPEM := root.PEM
 
 		cfg2 := testProviderConfigPrimary(t, map[string]interface{}{
 			"ExistingARN": p2State[AWSStateCAARNKey],
@@ -221,7 +221,7 @@ func TestAWSBootstrapAndSignSecondary(t *testing.T) {
 
 		root, err = p1.GenerateRoot()
 		require.NoError(t, err)
-		newRootPEM = root.RootCert
+		newRootPEM = root.PEM
 		newIntPEM, err = p2.ActiveIntermediate()
 		require.NoError(t, err)
 

@@ -253,8 +253,8 @@ func (c *CAManager) initializeCAConfig() (*structs.CAConfiguration, error) {
 	return config, nil
 }
 
-// parseCARoot returns a filled-in structs.CARoot from a raw PEM value.
-func parseCARoot(pemValue, provider, clusterID string) (*structs.CARoot, error) {
+// newCARoot returns a filled-in structs.CARoot from a raw PEM value.
+func newCARoot(pemValue, provider, clusterID string) (*structs.CARoot, error) {
 	id, err := connect.CalculateCertFingerprint(pemValue)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing root fingerprint: %v", err)
@@ -487,19 +487,9 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 		return fmt.Errorf("error generating CA root certificate: %v", err)
 	}
 
-	rootCA, err := parseCARoot(root.RootCert, conf.Provider, conf.ClusterID)
+	rootCA, err := newCARoot(root.PEM, conf.Provider, conf.ClusterID)
 	if err != nil {
 		return err
-	}
-
-	// Also create the intermediate CA, which is the one that actually signs leaf certs
-	interPEM, err := provider.GenerateIntermediate()
-	if err != nil {
-		return fmt.Errorf("error generating intermediate cert: %v", err)
-	}
-	intermediateCert, err := connect.ParseCert(interPEM)
-	if err != nil {
-		return fmt.Errorf("error getting intermediate cert: %v", err)
 	}
 
 	// If the provider has state to persist and it's changed or new then update
@@ -864,8 +854,8 @@ func (c *CAManager) primaryUpdateRootCA(newProvider ca.Provider, args *structs.C
 		return fmt.Errorf("error generating CA root certificate: %v", err)
 	}
 
-	newRootPEM := providerRoot.RootCert
-	newActiveRoot, err := parseCARoot(newRootPEM, args.Config.Provider, args.Config.ClusterID)
+	newRootPEM := providerRoot.PEM
+	newActiveRoot, err := newCARoot(newRootPEM, args.Config.Provider, args.Config.ClusterID)
 	if err != nil {
 		return err
 	}
@@ -918,7 +908,7 @@ func (c *CAManager) primaryUpdateRootCA(newProvider ca.Provider, args *structs.C
 		// get a cross-signed certificate.
 		// 3. Take the active root for the new provider and append the intermediate from step 2
 		// to its list of intermediates.
-		// TODO: this cert is already parsed once in parseCARoot, could we remove the second parse?
+		// TODO: this cert is already parsed once in newCARoot, could we remove the second parse?
 		newRoot, err := connect.ParseCert(newRootPEM)
 		if err != nil {
 			return err

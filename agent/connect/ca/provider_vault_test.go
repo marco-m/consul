@@ -244,7 +244,7 @@ func TestVaultCAProvider_Bootstrap(t *testing.T) {
 		{
 			certFunc: func() (string, error) {
 				root, err := providerWDefaultRootCertTtl.GenerateRoot()
-				return root.RootCert, err
+				return root.PEM, err
 			},
 			backendPath:         "pki-root/",
 			rootCaCreation:      true,
@@ -333,7 +333,7 @@ func TestVaultCAProvider_SignLeaf(t *testing.T) {
 
 			root, err := provider.GenerateRoot()
 			require.NoError(err)
-			rootPEM := root.RootCert
+			rootPEM := root.PEM
 			assertCorrectKeyType(t, tc.KeyType, rootPEM)
 
 			intPEM, err := provider.ActiveIntermediate()
@@ -419,7 +419,7 @@ func TestVaultCAProvider_CrossSignCA(t *testing.T) {
 			{
 				root, err := provider1.GenerateRoot()
 				require.NoError(err)
-				assertCorrectKeyType(t, tc.SigningKeyType, root.RootCert)
+				assertCorrectKeyType(t, tc.SigningKeyType, root.PEM)
 
 				intPEM, err := provider1.ActiveIntermediate()
 				require.NoError(err)
@@ -436,7 +436,7 @@ func TestVaultCAProvider_CrossSignCA(t *testing.T) {
 			{
 				root, err := provider2.GenerateRoot()
 				require.NoError(err)
-				assertCorrectKeyType(t, tc.CSRKeyType, root.RootCert)
+				assertCorrectKeyType(t, tc.CSRKeyType, root.PEM)
 
 				intPEM, err := provider2.ActiveIntermediate()
 				require.NoError(err)

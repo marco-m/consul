@@ -81,10 +81,10 @@ func TestConsulCAProvider_Bootstrap(t *testing.T) {
 	// Intermediate should be the same cert.
 	inter, err := provider.ActiveIntermediate()
 	require.NoError(err)
-	require.Equal(root.RootCert, inter)
+	require.Equal(root.PEM, inter)
 
 	// Should be a valid cert
-	parsed, err := connect.ParseCert(root.RootCert)
+	parsed, err := connect.ParseCert(root.PEM)
 	require.NoError(err)
 	require.Equal(parsed.URIs[0].String(), fmt.Sprintf("spiffe://%s.consul", conf.ClusterID))
 	requireNotEncoded(t, parsed.SubjectKeyId)
@@ -117,10 +117,10 @@ func TestConsulCAProvider_Bootstrap_WithCert(t *testing.T) {
 
 	root, err := provider.GenerateRoot()
 	require.NoError(err)
-	require.Equal(root.RootCert, rootCA.RootCert)
+	require.Equal(root.PEM, rootCA.RootCert)
 
 	// Should be a valid cert
-	parsed, err := connect.ParseCert(root.RootCert)
+	parsed, err := connect.ParseCert(root.PEM)
 	require.NoError(err)
 
 	// test that the default root cert ttl was not applied to the provided cert
@@ -290,7 +290,7 @@ func testCrossSignProviders(t *testing.T, provider1, provider2 Provider) {
 	root, err := provider2.GenerateRoot()
 	require.NoError(err)
 
-	newRoot, err := connect.ParseCert(root.RootCert)
+	newRoot, err := connect.ParseCert(root.PEM)
 	require.NoError(err)
 	oldSubject := newRoot.Subject.CommonName
 	requireNotEncoded(t, newRoot.SubjectKeyId)
@@ -313,7 +313,7 @@ func testCrossSignProviders(t *testing.T, provider1, provider2 Provider) {
 
 	p1Root, err := provider1.GenerateRoot()
 	require.NoError(err)
-	oldRoot, err := connect.ParseCert(p1Root.RootCert)
+	oldRoot, err := connect.ParseCert(p1Root.PEM)
 	require.NoError(err)
 	requireNotEncoded(t, oldRoot.SubjectKeyId)
 	requireNotEncoded(t, oldRoot.AuthorityKeyId)
@@ -424,7 +424,7 @@ func testSignIntermediateCrossDC(t *testing.T, provider1, provider2 Provider) {
 	require.NoError(err)
 	root, err := provider1.GenerateRoot()
 	require.NoError(err)
-	rootPEM := root.RootCert
+	rootPEM := root.PEM
 
 	// Give the new intermediate to provider2 to use.
 	require.NoError(provider2.SetIntermediate(intermediatePEM, rootPEM))

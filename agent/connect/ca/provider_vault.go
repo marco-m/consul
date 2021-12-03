@@ -300,7 +300,7 @@ func (v *VaultProvider) GenerateRoot() (RootResult, error) {
 		}
 	}
 
-	return RootResult{RootCert: rootPEM}, nil
+	return RootResult{PEM: rootPEM}, nil
 }
 
 // GenerateIntermediateCSR creates a private key and generates a CSR
