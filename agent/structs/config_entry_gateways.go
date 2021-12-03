@@ -109,7 +109,9 @@ type GatewayTLSConfig struct {
 	CipherSuites []types.TLSCipherSuite `json:",omitempty"`
 }
 
-// TODO: is there a better way to define a common subset of fields shared by this struct and GatewayTLSConfig?
+// Could consider breaking the subset of fields shared between this struct and
+// GatewayTLSConfig out into an embedded struct if more config becomes duplicated
+// in the future
 type GatewayServiceTLSConfig struct {
 	// Note no Enabled field here since it doesn't make sense to disable TLS on
 	// one host on a TLS-configured listener.
