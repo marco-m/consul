@@ -199,10 +199,10 @@ func resolveListenerTLSConfig(gatewayTLSCfg *structs.GatewayTLSConfig, listenerC
 	}
 
 	if listenerCfg.TLS != nil {
-		if listenerCfg.TLS.TLSMinVersion != types.TLSVersionInvalid {
+		if listenerCfg.TLS.TLSMinVersion != types.TLSVersionUnspecified {
 			mergedCfg.TLSMinVersion = listenerCfg.TLS.TLSMinVersion
 		}
-		if listenerCfg.TLS.TLSMaxVersion != types.TLSVersionInvalid {
+		if listenerCfg.TLS.TLSMaxVersion != types.TLSVersionUnspecified {
 			mergedCfg.TLSMaxVersion = listenerCfg.TLS.TLSMaxVersion
 		}
 		if len(listenerCfg.TLS.CipherSuites) != 0 {
@@ -370,10 +370,10 @@ func EnvoyTLSCipherSuites(cipherSuites []types.TLSCipherSuite) []string {
 func makeTLSParametersFromGatewayTLSConfig(tlsCfg structs.GatewayTLSConfig) *envoy_tls_v3.TlsParameters {
 	tlsParams := envoy_tls_v3.TlsParameters{}
 
-	if tlsCfg.TLSMinVersion != types.TLSVersionInvalid {
+	if tlsCfg.TLSMinVersion != types.TLSVersionUnspecified {
 		tlsParams.TlsMinimumProtocolVersion = EnvoyTLSVersions[tlsCfg.TLSMinVersion]
 	}
-	if tlsCfg.TLSMaxVersion != types.TLSVersionInvalid {
+	if tlsCfg.TLSMaxVersion != types.TLSVersionUnspecified {
 		tlsParams.TlsMaximumProtocolVersion = EnvoyTLSVersions[tlsCfg.TLSMaxVersion]
 	}
 	if len(tlsCfg.CipherSuites) != 0 {
@@ -386,10 +386,10 @@ func makeTLSParametersFromGatewayTLSConfig(tlsCfg structs.GatewayTLSConfig) *env
 func makeTLSParametersFromGatewayServiceTLSConfig(tlsCfg structs.GatewayServiceTLSConfig) *envoy_tls_v3.TlsParameters {
 	tlsParams := envoy_tls_v3.TlsParameters{}
 
-	if tlsCfg.TLSMinVersion != types.TLSVersionInvalid {
+	if tlsCfg.TLSMinVersion != types.TLSVersionUnspecified {
 		tlsParams.TlsMinimumProtocolVersion = EnvoyTLSVersions[tlsCfg.TLSMinVersion]
 	}
-	if tlsCfg.TLSMaxVersion != types.TLSVersionInvalid {
+	if tlsCfg.TLSMaxVersion != types.TLSVersionUnspecified {
 		tlsParams.TlsMaximumProtocolVersion = EnvoyTLSVersions[tlsCfg.TLSMaxVersion]
 	}
 	if len(tlsCfg.CipherSuites) != 0 {
