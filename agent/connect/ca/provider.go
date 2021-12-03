@@ -194,11 +194,13 @@ type SecondaryProvider interface {
 //
 // TODO: rename this
 type RootResult struct {
-	// PEM encoded bundle of CA certificates. The first certificate must be a
-	// root CA certificate, and the last certificate must be the local leaf
-	// signing CA certificate.
+	// PEM encoded bundle of CA certificates. The first certificate must be the
+	// primary CA used to sign intermediates for secondary datacenters, and the
+	// last certificate must be a root CA.
+	//
 	// If there is only a single certificate in the bundle then it must be a
-	// root CA, and will be used to sign leaf certificates.
+	// root CA, and will be used to sign intermediates for the secondary
+	// datacenters.
 	PEM string
 }
 

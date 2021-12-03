@@ -257,31 +257,69 @@ func (c *CAManager) initializeCAConfig() (*structs.CAConfiguration, error) {
 
 // newCARoot returns a filled-in structs.CARoot from a raw PEM value.
 func newCARoot(pemValue, provider, clusterID string) (*structs.CARoot, error) {
-	id, err := connect.CalculateCertFingerprint(pemValue)
+	certs, err := splitCerts(pemValue)
+	if err != nil {
+		return nil, err
+	}
+	if len(certs) == 0 {
+		return nil, fmt.Errorf("no vertificates in root PEM")
+	}
+	primaryCertRaw := certs[0]
+
+	rootPEM, err := connect.PEMEncode(certs[len(certs)-1], "CERTIFICATE")
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := connect.CalculateCertFingerprint(primaryCertRaw)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing root fingerprint: %v", err)
 	}
-	rootCert, err := connect.ParseCert(pemValue)
+	primaryCert, err := x509.ParseCertificate(primaryCertRaw)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing root cert: %v", err)
 	}
-	keyType, keyBits, err := connect.KeyInfoFromCert(rootCert)
+	keyType, keyBits, err := connect.KeyInfoFromCert(primaryCert)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting root key info: %v", err)
 	}
-	return &structs.CARoot{
+	caRoot := &structs.CARoot{
 		ID:                  id,
-		Name:                fmt.Sprintf("%s CA Root Cert", strings.Title(provider)),
-		SerialNumber:        rootCert.SerialNumber.Uint64(),
-		SigningKeyID:        connect.EncodeSigningKeyID(rootCert.SubjectKeyId),
+		Name:                fmt.Sprintf("%s CA Primary Cert", strings.Title(provider)),
+		SerialNumber:        primaryCert.SerialNumber.Uint64(),
+		SigningKeyID:        connect.EncodeSigningKeyID(primaryCert.SubjectKeyId),
 		ExternalTrustDomain: clusterID,
-		NotBefore:           rootCert.NotBefore,
-		NotAfter:            rootCert.NotAfter,
-		RootCert:            pemValue,
+		NotBefore:           primaryCert.NotBefore,
+		NotAfter:            primaryCert.NotAfter,
+		RootCert:            rootPEM,
 		PrivateKeyType:      keyType,
 		PrivateKeyBits:      keyBits,
 		Active:              true,
-	}, nil
+	}
+
+	// TODO: some test cases with different lengths of certs
+	// TODO: make sure test cases look at all fields.
+	for i := 0; i < len(certs)-1; i++ {
+		caRoot.IntermediateCerts = append(caRoot.IntermediateCerts, string(certs[i]))
+	}
+	return caRoot, nil
+}
+
+func splitCerts(pemValue string) ([][]byte, error) {
+	var result [][]byte
+	rest := []byte(pemValue)
+	for {
+		block, remaining := pem.Decode(rest)
+		if block == nil {
+			return result, nil
+		}
+		rest = remaining
+
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("PEM-block should be CERTIFICATE type")
+		}
+		result = append(result, block.Bytes)
+	}
 }
 
 // getCAProvider returns the currently active instance of the CA Provider,
