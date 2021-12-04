@@ -565,7 +565,7 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	rootPEM := generateExternalRootCA(t, vclient)
 
 	meshRootPath := "pki-root"
-	setupMeshRootCA(t, vclient, meshRootPath, rootPEM)
+	setupPrimaryCA(t, vclient, meshRootPath, rootPEM)
 
 	_, s1 := testServerWithConfig(t, func(c *Config) {
 		c.CAConfig = &structs.CAConfiguration{
@@ -593,7 +593,7 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, roots.Roots, 1)
 
-	pem := getLeafCert(t, codec, roots.TrustDomain)
+	pem := getLeafCert(t, codec, roots.TrustDomain, "dc1")
 	cert1, intermediates, err := connect.ParseLeafCerts(pem)
 	require.NoError(t, err)
 
@@ -607,6 +607,7 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 		t.Fatalf("Failed to add root CA")
 	}
 
+	// verify with intermediates from leaf CertPEM
 	_, err = cert1.Verify(x509.VerifyOptions{
 		Roots:         pool,
 		Intermediates: intermediates,
@@ -614,17 +615,99 @@ func TestCAManager_Initialize_Vault_WithIntermediateAsPrimaryCA(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	t.Fatalf("not done yet")
+	// verify with intermediates from the CARoot
+	intermediates = x509.NewCertPool()
+	for _, intermediate := range roots.Roots[0].IntermediateCerts {
+		c, err := connect.ParseCert(intermediate)
+		require.NoError(t, err)
+		fmt.Println("adding intermediate cert", connect.HexString(c.SubjectKeyId), c.Subject)
+		intermediates.AddCert(c)
+	}
+
+	_, err = cert1.Verify(x509.VerifyOptions{
+		Roots:         pool,
+		Intermediates: intermediates,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	})
+	require.NoError(t, err)
+
+	t.Run("secondary DC", func(t *testing.T) {
+		_, sDC2 := testServerWithConfig(t, func(c *Config) {
+			c.Datacenter = "dc2"
+			c.PrimaryDatacenter = "dc1"
+			c.CAConfig = &structs.CAConfiguration{
+				Provider: "vault",
+				Config: map[string]interface{}{
+					"Address":             vault.Addr,
+					"Token":               vault.RootToken,
+					"RootPKIPath":         meshRootPath,
+					"IntermediatePKIPath": "pki-secondary/",
+					// TODO: there are failures to init the CA system if these are not set
+					// to the values of the already initialized CA.
+					"PrivateKeyType": "ec",
+					"PrivateKeyBits": 256,
+				},
+			}
+		})
+		defer sDC2.Shutdown()
+		joinWAN(t, sDC2, s1)
+		testrpc.WaitForActiveCARoot(t, sDC2.RPC, "dc2", nil)
+
+		codec := rpcClient(t, sDC2)
+		defer codec.Close()
+
+		roots := structs.IndexedCARoots{}
+		err := msgpackrpc.CallWithCodec(codec, "ConnectCA.Roots", &structs.DCSpecificRequest{}, &roots)
+		require.NoError(t, err)
+		require.Len(t, roots.Roots, 1)
+
+		pem := getLeafCert(t, codec, roots.TrustDomain, "dc2")
+		cert1, intermediates, err := connect.ParseLeafCerts(pem)
+		require.NoError(t, err)
+
+		r, err := connect.ParseCert(roots.Roots[0].RootCert)
+		require.NoError(t, err)
+		fmt.Println("root cert", connect.HexString(r.SubjectKeyId), r.Subject)
+
+		pool := x509.NewCertPool()
+		ok := pool.AppendCertsFromPEM([]byte(roots.Roots[0].RootCert))
+		if !ok {
+			t.Fatalf("Failed to add root CA")
+		}
+
+		// verify with intermediates from leaf CertPEM
+		_, err = cert1.Verify(x509.VerifyOptions{
+			Roots:         pool,
+			Intermediates: intermediates,
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		})
+		require.NoError(t, err)
+
+		// verify with intermediates from the CARoot
+		intermediates = x509.NewCertPool()
+		for _, intermediate := range roots.Roots[0].IntermediateCerts {
+			c, err := connect.ParseCert(intermediate)
+			require.NoError(t, err)
+			fmt.Println("adding intermediate cert", connect.HexString(c.SubjectKeyId), c.Subject)
+			intermediates.AddCert(c)
+		}
+
+		_, err = cert1.Verify(x509.VerifyOptions{
+			Roots:         pool,
+			Intermediates: intermediates,
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		})
+		require.NoError(t, err)
+	})
 }
 
-func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string) string {
-	pk, pkPEM, err := connect.GeneratePrivateKey()
-	_ = pkPEM // TODO:
+func getLeafCert(t *testing.T, codec rpc.ClientCodec, trustDomain string, dc string) string {
+	pk, _, err := connect.GeneratePrivateKey()
 	require.NoError(t, err)
 	spiffeID := &connect.SpiffeIDService{
 		Host:       trustDomain,
 		Service:    "srv1",
-		Datacenter: "dc1",
+		Datacenter: dc,
 	}
 	csr, err := connect.CreateCSR(spiffeID, pk, nil, nil)
 	require.NoError(t, err)
@@ -657,11 +740,11 @@ func generateExternalRootCA(t *testing.T, client *vaultapi.Client) string {
 	return resp.Data["certificate"].(string)
 }
 
-func setupMeshRootCA(t *testing.T, client *vaultapi.Client, path string, rootPEM string) {
+func setupPrimaryCA(t *testing.T, client *vaultapi.Client, path string, rootPEM string) {
 	t.Helper()
 	err := client.Sys().Mount(path, &vaultapi.MountInput{
 		Type:        "pki",
-		Description: "mesh root for Consul CA",
+		Description: "primary CA for Consul CA",
 		Config: vaultapi.MountConfigInput{
 			MaxLeaseTTL:     "2200h",
 			DefaultLeaseTTL: "1h",

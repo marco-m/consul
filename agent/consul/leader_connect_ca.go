@@ -2,7 +2,6 @@ package consul
 
 import (
 	"context"
-	"crypto/sha1"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -486,7 +485,7 @@ func (c *CAManager) primaryInitialize(provider ca.Provider, conf *structs.CAConf
 	if err != nil {
 		return fmt.Errorf("error getting root cert: %v", err)
 	}
-	fmt.Println("ERROR", logCertChain(rootPEM))
+	//fmt.Println("ERROR", logCertChain(rootPEM))
 	rootCA, err := parseCARoot(rootPEM, conf.Provider, conf.ClusterID)
 	if err != nil {
 		return err
@@ -624,12 +623,9 @@ func logCertChain(pemValue string) error {
 			return err
 		}
 
-		raw := sha1.Sum(block.Bytes)
-		hash := connect.HexString(raw[:])
-
-		sid := connect.EncodeSigningKeyID(cert.SubjectKeyId)
-
-		fmt.Println("cert", cert.IsCA, hash, sid, cert.Subject, cert.MaxPathLen, cert.MaxPathLenZero)
+		fmt.Println("cert", cert.Subject,
+			connect.EncodeSigningKeyID(cert.SubjectKeyId),
+			connect.EncodeSigningKeyID(cert.AuthorityKeyId))
 	}
 }
 
@@ -1115,6 +1111,9 @@ func (c *CAManager) secondaryRenewIntermediate(provider ca.Provider, newActiveRo
 		c.logger.Warn("Primary datacenter refused to sign our intermediate CA certificate", "error", err)
 		return nil
 	}
+
+	fmt.Println("secondary root", logCertChain(newActiveRoot.RootCert))
+	fmt.Println("secondary intermediate", logCertChain(intermediatePEM))
 
 	if err := provider.SetIntermediate(intermediatePEM, newActiveRoot.RootCert); err != nil {
 		return fmt.Errorf("Failed to set the intermediate certificate with the CA provider: %v", err)
