@@ -58,8 +58,6 @@ func TestCAManager_Initialize_Vault_Secondary_SharedVault(t *testing.T) {
 		testrpc.WaitForTestAgent(t, serverDC1.RPC, "dc1")
 
 		codec := rpcClient(t, serverDC1)
-		defer codec.Close()
-
 		roots := structs.IndexedCARoots{}
 		err := msgpackrpc.CallWithCodec(codec, "ConnectCA.Roots", &structs.DCSpecificRequest{}, &roots)
 		require.NoError(t, err)
@@ -88,8 +86,6 @@ func TestCAManager_Initialize_Vault_Secondary_SharedVault(t *testing.T) {
 		testrpc.WaitForActiveCARoot(t, serverDC2.RPC, "dc2", nil)
 
 		codec := rpcClient(t, serverDC2)
-		defer codec.Close()
-
 		roots := structs.IndexedCARoots{}
 		err := msgpackrpc.CallWithCodec(codec, "ConnectCA.Roots", &structs.DCSpecificRequest{}, &roots)
 		require.NoError(t, err)
